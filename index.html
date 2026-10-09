@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>어휘 상자 놀이 - 포함하는 말과 포함되는 말</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts (Noto Sans KR) -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #F0F9FF;
+            user-select: none;
+        }
+        .bouncy {
+            animation: bounce 0.6s infinite alternate;
+        }
+        @keyframes bounce {
+            from { transform: translateY(0px); }
+            to { transform: translateY(-8px); }
+        }
+        .pop-in {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .correct-flash {
+            animation: flashGreen 0.5s ease;
+        }
+        @keyframes flashGreen {
+            0%, 100% { background-color: transparent; }
+            50% { background-color: rgba(74, 222, 128, 0.3); }
+        }
+        /* 정답/오답 애니메이션 */
+        .pop-scale {
+            animation: popScale 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popScale {
+            0% { transform: scale(0.2); opacity: 0; }
+            70% { transform: scale(1.15); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .shake-x {
+            animation: shakeX 0.5s ease-in-out;
+        }
+        @keyframes shakeX {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-12px); }
+            40%, 80% { transform: translateX(12px); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between text-slate-800">
+
+    <!-- 폭죽 애니메이션용 캔버스 -->
+    <canvas id="fireworks-canvas" class="fixed inset-0 pointer-events-none z-50 hidden"></canvas>
+
+    <!-- 상단 헤더 -->
+    <header class="bg-white shadow-md border-b-4 border-sky-400 sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <span class="text-3xl md:text-4xl">📦</span>
+                <div>
+                    <h1 class="text-xl md:text-2xl font-black text-sky-600 leading-tight">어휘 상자 놀이</h1>
+                    <p class="text-xs md:text-sm font-bold text-slate-500">포함하는 말과 포함되는 말</p>
+                </div>
+            </div>
+            
+            <!-- 점수 및 음성 토글 -->
+            <div class="flex items-center space-x-3">
+                <div class="bg-amber-100 border-2 border-amber-300 px-3 py-1.5 rounded-full flex items-center space-x-1.5">
+                    <span class="text-xl">⭐</span>
+                    <span id="score-display" class="font-black text-amber-600 text-lg md:text-xl">0</span>
+                    <span class="text-xs font-bold text-amber-700">점</span>
+                </div>
+                <button id="tts-toggle-btn" onclick="toggleTTS()" class="bg-sky-100 hover:bg-sky-200 text-sky-700 p-2.5 rounded-full border-2 border-sky-300 transition-all flex items-center justify-center text-lg" title="음성 설명 켜기/끄기">
+                    <i id="tts-icon" class="fas fa-volume-up"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 메뉴 탭 -->
+    <nav class="max-w-4xl mx-auto w-full px-4 mt-4">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 bg-slate-200 p-1.5 rounded-2xl">
+            <button onclick="switchTab('learn')" id="tab-learn" class="tab-btn active font-bold py-2.5 px-3 rounded-xl transition-all text-sm md:text-base flex items-center justify-center space-x-1.5 bg-white text-sky-600 shadow">
+                <span>📖</span>
+                <span>개념 배우기</span>
+            </button>
+            <button onclick="switchTab('game1')" id="tab-game1" class="tab-btn font-bold py-2.5 px-3 rounded-xl transition-all text-sm md:text-base flex items-center justify-center space-x-1.5 text-slate-600 hover:text-sky-600">
+                <span>🎁</span>
+                <span>상자 넣기</span>
+            </button>
+            <button onclick="switchTab('game2')" id="tab-game2" class="tab-btn font-bold py-2.5 px-3 rounded-xl transition-all text-sm md:text-base flex items-center justify-center space-x-1.5 text-slate-600 hover:text-sky-600">
+                <span>🔍</span>
+                <span>대표 말 찾기</span>
+            </button>
+            <button onclick="switchTab('game3')" id="tab-game3" class="tab-btn font-bold py-2.5 px-3 rounded-xl transition-all text-sm md:text-base flex items-center justify-center space-x-1.5 text-slate-600 hover:text-sky-600">
+                <span>❌</span>
+                <span>다른 하나 찾기</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="max-w-4xl mx-auto w-full px-4 py-4 flex-grow flex flex-col justify-center">
+
+        <!-- 1. 개념 배우기 모드 -->
+        <section id="section-learn" class="tab-content bg-white p-5 md:p-8 rounded-3xl shadow-lg border-2 border-slate-100 pop-in">
+            <div class="text-center mb-6">
+                <span class="inline-block bg-sky-100 text-sky-700 px-4 py-1 rounded-full text-sm font-bold mb-2">알아보아요!</span>
+                <h2 class="text-2xl md:text-3xl font-black text-slate-800">포함하는 말과 포함되는 말이 뭘까요?</h2>
+            </div>
+
+            <!-- 개념 설명 카드 -->
+            <div class="grid md:grid-cols-2 gap-6 items-center">
+                <!-- 포함하는 말 (큰 상자) -->
+                <div class="bg-amber-50 border-4 border-amber-300 rounded-3xl p-5 text-center shadow-sm">
+                    <div class="text-xs font-bold text-amber-600 bg-amber-200 inline-block px-3 py-1 rounded-full mb-2">큰 상자 📦</div>
+                    <h3 class="text-2xl font-black text-amber-800 mb-2">포함하는 말</h3>
+                    <p class="text-sm md:text-base text-amber-900 font-bold mb-4">여러 가지 낱말을 묶어주는 <span class="text-amber-600 underline decoration-2">큰 이름</span>이에요.</p>
+                    
+                    <div class="bg-white rounded-2xl p-4 border-2 border-amber-200 inline-block w-full">
+                        <div class="text-4xl mb-1">🍎</div>
+                        <div class="text-2xl font-black text-amber-600">"과일"</div>
+                    </div>
+                </div>
+
+                <!-- 포함되는 말 (작은 요소들) -->
+                <div class="bg-emerald-50 border-4 border-emerald-300 rounded-3xl p-5 text-center shadow-sm">
+                    <div class="text-xs font-bold text-emerald-600 bg-emerald-200 inline-block px-3 py-1 rounded-full mb-2">상자 안의 물건들 🍎🍌🍇</div>
+                    <h3 class="text-2xl font-black text-emerald-800 mb-2">포함되는 말</h3>
+                    <p class="text-sm md:text-base text-emerald-900 font-bold mb-4">큰 이름 안에 들어가는 <span class="text-emerald-600 underline decoration-2">작은 낱말들</span>이에요.</p>
+                    
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="bg-white rounded-xl p-2 border-2 border-emerald-200">
+                            <div class="text-2xl">🍎</div>
+                            <div class="font-bold text-sm text-slate-700">사과</div>
+                        </div>
+                        <div class="bg-white rounded-xl p-2 border-2 border-emerald-200">
+                            <div class="text-2xl">🍌</div>
+                            <div class="font-bold text-sm text-slate-700">바나나</div>
+                        </div>
+                        <div class="bg-white rounded-xl p-2 border-2 border-emerald-200">
+                            <div class="text-2xl">🍇</div>
+                            <div class="font-bold text-sm text-slate-700">포도</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 예시 인터랙션 카드 카루셀/목록 -->
+            <div class="mt-8 bg-slate-50 p-4 rounded-2xl border-2 border-slate-200">
+                <h4 class="font-bold text-slate-700 mb-3 text-center flex items-center justify-center space-x-2">
+                    <span>💡</span>
+                    <span>버튼을 눌러 소리를 들어보세요!</span>
+                </h4>
+                <div id="example-buttons" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <!-- JS로 동적 생성 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. 게임 1: 상자 넣기 (분류 게임) -->
+        <section id="section-game1" class="tab-content hidden bg-white p-5 md:p-8 rounded-3xl shadow-lg border-2 border-slate-100 pop-in">
+            <div class="text-center mb-4">
+                <span class="inline-block bg-amber-100 text-amber-700 px-4 py-1 rounded-full text-sm font-bold mb-1">게임 1</span>
+                <h2 class="text-xl md:text-2xl font-black text-slate-800">낱말을 알맞은 상자에 넣어요!</h2>
+                <p class="text-xs md:text-sm font-bold text-slate-500">아래 낱말은 어떤 큰 상자에 들어가야 할까요?</p>
+            </div>
+
+            <!-- 현재 문제 낱말 카드 -->
+            <div class="my-6 flex justify-center">
+                <div id="g1-target-card" class="bg-yellow-100 border-4 border-yellow-400 p-6 rounded-3xl text-center shadow-md transform transition hover:scale-105 cursor-pointer max-w-xs w-full" onclick="speakText(currentG1Item.word)">
+                    <div id="g1-target-icon" class="text-6xl mb-2 bouncy">❓</div>
+                    <div id="g1-target-word" class="text-3xl font-black text-slate-800">낱말</div>
+                    <div class="text-xs font-bold text-yellow-700 mt-2 flex items-center justify-center space-x-1">
+                        <i class="fas fa-volume-up"></i>
+                        <span>눌러서 듣기</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 선택할 상자들 -->
+            <div id="g1-boxes-container" class="grid grid-cols-2 gap-4 mt-6">
+                <!-- JS로 상자 2개 생성 -->
+            </div>
+        </section>
+
+        <!-- 3. 게임 2: 포함하는 말 찾기 (퀴즈) -->
+        <section id="section-game2" class="tab-content hidden bg-white p-5 md:p-8 rounded-3xl shadow-lg border-2 border-slate-100 pop-in">
+            <div class="text-center mb-4">
+                <span class="inline-block bg-blue-100 text-blue-700 px-4 py-1 rounded-full text-sm font-bold mb-1">게임 2</span>
+                <h2 class="text-xl md:text-2xl font-black text-slate-800">이 낱말들을 포함하는 말은?</h2>
+                <p class="text-xs md:text-sm font-bold text-slate-500">세 가지 낱말을 모두 모을 수 있는 큰 상자 이름을 고르세요.</p>
+            </div>
+
+            <!-- 제시되는 포함되는 말 3개 -->
+            <div class="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-4 my-6">
+                <div class="text-center text-xs font-bold text-indigo-500 mb-2">포함되는 작은 낱말들</div>
+                <div id="g2-items-container" class="flex justify-center items-center space-x-2 md:space-x-4">
+                    <!-- JS로 생성 -->
+                </div>
+            </div>
+
+            <!-- 선택지 (포함하는 말 카테고리 3개) -->
+            <div id="g2-options-container" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <!-- JS로 생성 -->
+            </div>
+        </section>
+
+        <!-- 4. 게임 3: 다른 하나 찾기 (소거 퀴즈) -->
+        <section id="section-game3" class="tab-content hidden bg-white p-5 md:p-8 rounded-3xl shadow-lg border-2 border-slate-100 pop-in">
+            <div class="text-center mb-4">
+                <span class="inline-block bg-rose-100 text-rose-700 px-4 py-1 rounded-full text-sm font-bold mb-1">게임 3</span>
+                <h2 class="text-xl md:text-2xl font-black text-slate-800">상자에 들어가면 안 되는 것은?</h2>
+                <p class="text-xs md:text-sm font-bold text-slate-500">상자 이름에 포함되지 않는 잘못 들어간 낱말을 찾아 터치하세요.</p>
+            </div>
+
+            <!-- 상자 이름 -->
+            <div class="text-center mb-4">
+                <div id="g3-box-header" class="inline-flex items-center space-x-2 bg-purple-100 border-2 border-purple-300 px-6 py-2.5 rounded-full">
+                    <span id="g3-box-icon" class="text-2xl">📦</span>
+                    <span id="g3-box-title" class="text-2xl font-black text-purple-800">상자 이름</span>
+                    <span class="text-sm font-bold text-purple-600">상자</span>
+                </div>
+            </div>
+
+            <!-- 상자 안의 낱말 4개 (1개는 오답) -->
+            <div id="g3-cards-container" class="grid grid-cols-2 md:grid-cols-4 gap-4 my-6">
+                <!-- JS로 생성 -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 성공 / 오답 피드백 모달 -->
+    <div id="feedback-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div id="modal-content-box" class="bg-white rounded-3xl p-6 md:p-10 max-w-md w-full text-center shadow-2xl transform transition-all border-4 border-amber-300 pop-scale flex flex-col items-center">
+            
+            <!-- 중앙 시각 아이콘 (폭죽 축하 / 거대 X표시) -->
+            <div id="modal-icon-container" class="relative my-2 flex items-center justify-center">
+                <div id="modal-emoji" class="text-7xl md:text-8xl bouncy">🎉</div>
+                <div id="modal-x-mark" class="text-8xl md:text-9xl text-red-500 font-black hidden shake-x drop-shadow-lg">❌</div>
+            </div>
+
+            <!-- 메시지 -->
+            <h3 class="text-3xl md:text-4xl font-black text-slate-800 my-2" id="modal-title">참 잘했어요!</h3>
+            <p class="text-slate-600 font-bold mb-6 text-base md:text-lg" id="modal-msg">정답입니다! 점수를 얻었습니다.</p>
+            
+            <button id="modal-next-btn" onclick="closeModalNext()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xl py-4 rounded-2xl shadow-lg transition active:scale-95 flex items-center justify-center space-x-2">
+                <span>다음 문제로</span>
+                <span>➡️</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 하단 푸터 -->
+    <footer class="bg-slate-100 border-t border-slate-200 py-3 text-center text-xs font-bold text-slate-500">
+        <p>특수교육 국어 수업 교구용 웹앱 | 포함하는 말과 포함되는 말</p>
+    </footer>
+
+    <script>
+        // --- 기본 어휘 데이터베이스 ---
+        const VOCAB_DATA = [
+            {
+                category: "과일",
+                icon: "🍎",
+                color: "bg-red-100 border-red-300 text-red-800 hover:bg-red-200",
+                bgColor: "bg-red-50",
+                borderColor: "border-red-400",
+                items: [
+                    { word: "사과", icon: "🍎" },
+                    { word: "바나나", icon: "🍌" },
+                    { word: "포도", icon: "🍇" },
+                    { word: "수박", icon: "🍉" },
+                    { word: "딸기", icon: "🍓" }
+                ]
+            },
+            {
+                category: "동물",
+                icon: "🐶",
+                color: "bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200",
+                bgColor: "bg-amber-50",
+                borderColor: "border-amber-400",
+                items: [
+                    { word: "강아지", icon: "🐶" },
+                    { word: "고양이", icon: "🐱" },
+                    { word: "토끼", icon: "🐰" },
+                    { word: "호랑이", icon: "🐯" },
+                    { word: "사자", icon: "🦁" }
+                ]
+            },
+            {
+                category: "학용품",
+                icon: "✏️",
+                color: "bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200",
+                bgColor: "bg-blue-50",
+                borderColor: "border-blue-400",
+                items: [
+                    { word: "연필", icon: "✏️" },
+                    { word: "지우개", icon: "🧹" },
+                    { word: "공책", icon: "📓" },
+                    { word: "자", icon: "📏" },
+                    { word: "가위", icon: "✂️" }
+                ]
+            },
+            {
+                category: "탈것",
+                icon: "🚗",
+                color: "bg-emerald-100 border-emerald-300 text-emerald-800 hover:bg-emerald-200",
+                bgColor: "bg-emerald-50",
+                borderColor: "border-emerald-400",
+                items: [
+                    { word: "자동차", icon: "🚗" },
+                    { word: "버스", icon: "🚌" },
+                    { word: "비행기", icon: "✈️" },
+                    { word: "기차", icon: "🚂" },
+                    { word: "자전거", icon: "🚲" }
+                ]
+            },
+            {
+                category: "옷",
+                icon: "👕",
+                color: "bg-purple-100 border-purple-300 text-purple-800 hover:bg-purple-200",
+                bgColor: "bg-purple-50",
+                borderColor: "border-purple-400",
+                items: [
+                    { word: "티셔츠", icon: "👕" },
+                    { word: "바지", icon: "👖" },
+                    { word: "양말", icon: "🧦" },
+                    { word: "모자", icon: "🧢" },
+                    { word: "외투", icon: "🧥" }
+                ]
+            },
+            {
+                category: "가구",
+                icon: "🪑",
+                color: "bg-orange-100 border-orange-300 text-orange-800 hover:bg-orange-200",
+                bgColor: "bg-orange-50",
+                borderColor: "border-orange-400",
+                items: [
+                    { word: "의자", icon: "🪑" },
+                    { word: "책상", icon: "📑" },
+                    { word: "침대", icon: "🛏️" },
+                    { word: "옷장", icon: "🚪" }
+                ]
+            }
+        ];
+
+        // --- 전역 상태 변수 ---
+        let totalScore = 0;
+        let isTTSEnabled = true;
+        let currentTab = 'learn';
+        let currentG1Item = null;
+        let currentG1Categories = [];
+        let currentG2Answer = null;
+        let currentG3Answer = null;
+        let nextGameCallback = null;
+
+        // --- Web Audio API (사운드 효과 및 박수소리) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            if (type === 'correct') {
+                const now = audioCtx.currentTime;
+                
+                // 1. 팡파레 멜로디 (도-미-솔-도)
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+                    gain.gain.setValueAtTime(0.3, now + idx * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.3);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.start(now + idx * 0.1);
+                    osc.stop(now + idx * 0.1 + 0.3);
+                });
+
+                // 2. 박수 소리 시뮬레이션 (노이즈 펄스 세트)
+                for (let i = 0; i < 25; i++) {
+                    const clapDelay = now + 0.1 + Math.random() * 0.8;
+                    const bufferSize = audioCtx.sampleRate * 0.05; // 50ms 노이즈
+                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let j = 0; j < bufferSize; j++) {
+                        data[j] = Math.random() * 2 - 1;
+                    }
+
+                    const noise = audioCtx.createBufferSource();
+                    noise.buffer = buffer;
+
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.value = 1000 + Math.random() * 1000;
+
+                    const gain = audioCtx.createGain();
+                    gain.gain.setValueAtTime(0.15, clapDelay);
+                    gain.gain.exponentialRampToValueAtTime(0.01, clapDelay + 0.05);
+
+                    noise.connect(filter);
+                    filter.connect(gain);
+                    gain.connect(audioCtx.destination);
+
+                    noise.start(clapDelay);
+                    noise.stop(clapDelay + 0.05);
+                }
+            } else if (type === 'wrong') {
+                // 오답 삐- 소리 (낮고 명확한 경고음)
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, now); // 낮은 삐- 소리
+                osc.frequency.setValueAtTime(140, now + 0.2);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.45);
+            }
+        }
+
+        // --- 화면 중앙 폭죽 애니메이션 ---
+        function triggerFireworks() {
+            const canvas = document.getElementById('fireworks-canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.classList.remove('hidden');
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            const particles = [];
+            const colors = ['#f43f5e', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2 - 50;
+
+            // 중앙에서 터지는 80개 폭죽 입자 생성
+            for (let i = 0; i < 90; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 3 + Math.random() * 9;
+                particles.push({
+                    x: centerX,
+                    y: centerY,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    size: 4 + Math.random() * 6,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    alpha: 1,
+                    decay: 0.015 + Math.random() * 0.02
+                });
+            }
+
+            let animationFrame;
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                let alive = false;
+
+                particles.forEach(p => {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.15; // 중력 적용
+                    p.alpha -= p.decay;
+
+                    if (p.alpha > 0) {
+                        alive = true;
+                        ctx.save();
+                        ctx.globalAlpha = p.alpha;
+                        ctx.fillStyle = p.color;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                });
+
+                if (alive) {
+                    animationFrame = requestAnimationFrame(animate);
+                } else {
+                    cancelAnimationFrame(animationFrame);
+                    canvas.classList.add('hidden');
+                }
+            }
+
+            animate();
+        }
+
+        // --- 음성 읽어주기 (TTS) ---
+        function speakText(text) {
+            if (!isTTSEnabled || !('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel(); // 이전 음성 중단
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ko-KR';
+            utterance.rate = 0.85; // 조금 천천히 읽기 (발달장애 학생용)
+            utterance.pitch = 1.1; // 약간 높은 톤
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function toggleTTS() {
+            isTTSEnabled = !isTTSEnabled;
+            const icon = document.getElementById('tts-icon');
+            const btn = document.getElementById('tts-toggle-btn');
+            if (isTTSEnabled) {
+                icon.className = 'fas fa-volume-up';
+                btn.className = 'bg-sky-100 hover:bg-sky-200 text-sky-700 p-2.5 rounded-full border-2 border-sky-300 transition-all flex items-center justify-center text-lg';
+                speakText('음성 안내가 켜졌습니다.');
+            } else {
+                icon.className = 'fas fa-volume-mute';
+                btn.className = 'bg-slate-200 text-slate-500 p-2.5 rounded-full border-2 border-slate-300 transition-all flex items-center justify-center text-lg';
+                window.speechSynthesis.cancel();
+            }
+        }
+
+        // --- 탭 전환 기능 ---
+        function switchTab(tabName) {
+            currentTab = tabName;
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-white', 'text-sky-600', 'shadow');
+                btn.classList.add('text-slate-600');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            activeBtn.classList.add('bg-white', 'text-sky-600', 'shadow');
+            activeBtn.classList.remove('text-slate-600');
+
+            const activeSection = document.getElementById(`section-${tabName}`);
+            activeSection.classList.remove('hidden');
+
+            if (tabName === 'game1') initGame1();
+            if (tabName === 'game2') initGame2();
+            if (tabName === 'game3') initGame3();
+            if (tabName === 'learn') speakText('개념 배우기 페이지입니다. 버튼을 누르면 소리가 납니다.');
+        }
+
+        // --- 1. 개념 배우기 초기화 ---
+        function initLearnMode() {
+            const container = document.getElementById('example-buttons');
+            container.innerHTML = '';
+
+            VOCAB_DATA.slice(0, 4).forEach(cat => {
+                const btn = document.createElement('button');
+                btn.className = `${cat.color} border-2 p-3 rounded-2xl text-left transition transform hover:scale-102 active:scale-95 shadow-sm`;
+                btn.innerHTML = `
+                    <div class="font-black text-lg flex items-center space-x-2">
+                        <span>${cat.icon}</span>
+                        <span>${cat.category}</span>
+                    </div>
+                    <div class="text-xs font-bold mt-1 opacity-80">
+                        포함: ${cat.items.map(i => i.word).slice(0, 3).join(', ')}...
+                    </div>
+                `;
+                btn.onclick = () => {
+                    const sampleItems = cat.items.map(i => i.word).join(', ');
+                    speakText(`${cat.category} 상자 안에는 ${sampleItems} 등이 들어있어요!`);
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        // --- 2. 게임 1: 상자 넣기 (분류 게임) ---
+        function initGame1() {
+            // 랜덤 카테고리 2개 선정
+            const shuffledCat = [...VOCAB_DATA].sort(() => 0.5 - Math.random());
+            const correctCat = shuffledCat[0];
+            const wrongCat = shuffledCat[1];
+            currentG1Categories = [correctCat, wrongCat].sort(() => 0.5 - Math.random());
+
+            // 정답 아이템 랜덤 선정
+            const randomItem = correctCat.items[Math.floor(Math.random() * correctCat.items.length)];
+            currentG1Item = { ...randomItem, correctCategory: correctCat.category };
+
+            // UI 업데이트
+            document.getElementById('g1-target-icon').textContent = currentG1Item.icon;
+            document.getElementById('g1-target-word').textContent = currentG1Item.word;
+
+            const boxesContainer = document.getElementById('g1-boxes-container');
+            boxesContainer.innerHTML = '';
+
+            currentG1Categories.forEach(cat => {
+                const boxBtn = document.createElement('button');
+                boxBtn.className = `${cat.bgColor} ${cat.borderColor} border-4 p-5 rounded-3xl text-center shadow-md hover:shadow-lg transition transform active:scale-95 flex flex-col items-center justify-center space-y-2 cursor-pointer`;
+                boxBtn.innerHTML = `
+                    <div class="text-5xl">${cat.icon}</div>
+                    <div class="text-2xl font-black text-slate-800">${cat.category} 상자</div>
+                    <div class="text-xs font-bold text-slate-500 bg-white/80 px-3 py-1 rounded-full">여기에 넣기</div>
+                `;
+                boxBtn.onclick = () => checkGame1(cat.category);
+                boxesContainer.appendChild(boxBtn);
+            });
+
+            speakText(`${currentG1Item.word}! ${currentG1Item.word}은 어떤 상자에 들어갈까요?`);
+        }
+
+        function checkGame1(selectedCategory) {
+            if (selectedCategory === currentG1Item.correctCategory) {
+                handleCorrect(`${currentG1Item.word}은(는) ${currentG1Item.correctCategory} 상자에 쏙 들어가요!`, initGame1);
+            } else {
+                handleWrong(`${currentG1Item.word}은(는) ${selectedCategory} 상자가 아니에요. 다시 생각해 볼까요?`);
+            }
+        }
+
+        // --- 3. 게임 2: 포함하는 말 찾기 (퀴즈) ---
+        function initGame2() {
+            const shuffledCat = [...VOCAB_DATA].sort(() => 0.5 - Math.random());
+            const correctCat = shuffledCat[0];
+
+            // 카테고리 내에서 랜덤 3개 추출
+            const targetItems = [...correctCat.items].sort(() => 0.5 - Math.random()).slice(0, 3);
+            currentG2Answer = correctCat.category;
+
+            // 제시어 UI
+            const itemsContainer = document.getElementById('g2-items-container');
+            itemsContainer.innerHTML = targetItems.map(item => `
+                <div class="bg-white border-2 border-indigo-300 rounded-2xl px-3 py-2 text-center shadow-sm flex flex-col items-center flex-1 max-w-[100px]">
+                    <span class="text-3xl mb-1">${item.icon}</span>
+                    <span class="font-black text-slate-800 text-sm md:text-base">${item.word}</span>
+                </div>
+            `).join('');
+
+            // 보기 카테고리 3개 (정답 1 + 오답 2)
+            const optionCats = [correctCat, shuffledCat[1], shuffledCat[2]].sort(() => 0.5 - Math.random());
+            const optionsContainer = document.getElementById('g2-options-container');
+            optionsContainer.innerHTML = '';
+
+            optionCats.forEach(cat => {
+                const optBtn = document.createElement('button');
+                optBtn.className = `bg-white hover:bg-indigo-50 border-3 border-indigo-200 p-4 rounded-2xl text-center shadow transition transform active:scale-95 flex items-center justify-center space-x-3 cursor-pointer`;
+                optBtn.innerHTML = `
+                    <span class="text-3xl">${cat.icon}</span>
+                    <span class="text-xl font-black text-slate-800">${cat.category}</span>
+                `;
+                optBtn.onclick = () => checkGame2(cat.category);
+                optionsContainer.appendChild(optBtn);
+            });
+
+            const wordsListStr = targetItems.map(i => i.word).join(', ');
+            speakText(`${wordsListStr}을 모두 포함하는 말은 무엇일까요?`);
+        }
+
+        function checkGame2(selectedCat) {
+            if (selectedCat === currentG2Answer) {
+                handleCorrect(`맞았습니다! 모두 ${currentG2Answer}에 포함되는 말이에요!`, initGame2);
+            } else {
+                handleWrong(`아쉬워요. ${selectedCat} 상자에는 맞지 않는 낱말이 있어요.`);
+            }
+        }
+
+        // --- 4. 게임 3: 다른 하나 찾기 (소거 퀴즈) ---
+        function initGame3() {
+            const shuffledCat = [...VOCAB_DATA].sort(() => 0.5 - Math.random());
+            const correctCat = shuffledCat[0]; // 기준 상자
+            const wrongCat = shuffledCat[1];   // 엉뚱한 낱말 출처
+
+            // 정답 상자에 들어갈 알맞은 낱말 3개
+            const validItems = [...correctCat.items].sort(() => 0.5 - Math.random()).slice(0, 3);
+            // 다른 상자의 엉뚱한 낱말 1개 (이것이 클릭해야 할 정답!)
+            const oddItem = wrongCat.items[Math.floor(Math.random() * wrongCat.items.length)];
+            currentG3Answer = oddItem.word;
+
+            // 4개 섞기
+            const allCards = [
+                ...validItems.map(i => ({ ...i, isOdd: false })),
+                { ...oddItem, isOdd: true }
+            ].sort(() => 0.5 - Math.random());
+
+            // UI
+            document.getElementById('g3-box-icon').textContent = correctCat.icon;
+            document.getElementById('g3-box-title').textContent = correctCat.category;
+
+            const cardsContainer = document.getElementById('g3-cards-container');
+            cardsContainer.innerHTML = '';
+
+            allCards.forEach(item => {
+                const cardBtn = document.createElement('button');
+                cardBtn.className = `bg-white hover:bg-rose-50 border-3 border-purple-200 p-4 rounded-2xl text-center shadow transition transform active:scale-95 flex flex-col items-center justify-center cursor-pointer`;
+                cardBtn.innerHTML = `
+                    <span class="text-4xl mb-2">${item.icon}</span>
+                    <span class="text-xl font-black text-slate-800">${item.word}</span>
+                `;
+                cardBtn.onclick = () => checkGame3(item.word, item.isOdd, correctCat.category);
+                cardsContainer.appendChild(cardBtn);
+            });
+
+            speakText(`${correctCat.category} 상자에 포함되지 않는 다른 하나는 무엇일까요?`);
+        }
+
+        function checkGame3(word, isOdd, boxCategory) {
+            if (isOdd) {
+                handleCorrect(`정답이에요! ${word}은(는) ${boxCategory} 상자에 속하지 않아요!`, initGame3);
+            } else {
+                handleWrong(`${word}은(는) ${boxCategory} 상자에 포함되는 말이 맞아요. 다시 찾아보세요.`);
+            }
+        }
+
+        // --- 공통 피드백 및 정답 처리 ---
+        function handleCorrect(message, nextCallback) {
+            playSound('correct');
+            triggerFireworks(); // 폭죽 실행
+            totalScore += 10;
+            document.getElementById('score-display').textContent = totalScore;
+
+            const modalBox = document.getElementById('modal-content-box');
+            modalBox.className = "bg-white rounded-3xl p-6 md:p-10 max-w-md w-full text-center shadow-2xl transform transition-all border-4 border-amber-300 pop-scale flex flex-col items-center";
+
+            document.getElementById('modal-emoji').classList.remove('hidden');
+            document.getElementById('modal-emoji').textContent = '👏';
+            document.getElementById('modal-x-mark').classList.add('hidden');
+            
+            document.getElementById('modal-title').textContent = '참 잘했어요!';
+            document.getElementById('modal-title').className = 'text-3xl md:text-4xl font-black text-amber-600 my-2';
+            document.getElementById('modal-msg').textContent = message;
+
+            document.getElementById('modal-next-btn').className = 'w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xl py-4 rounded-2xl shadow-lg transition active:scale-95 flex items-center justify-center space-x-2';
+            document.getElementById('modal-next-btn').innerHTML = '<span>다음 문제로</span> <span>➡️</span>';
+
+            nextGameCallback = nextCallback;
+            document.getElementById('feedback-modal').classList.remove('hidden');
+
+            speakText(`참 잘했어요! ${message}`);
+        }
+
+        function handleWrong(message) {
+            playSound('wrong'); // 삐- 소리
+
+            const modalBox = document.getElementById('modal-content-box');
+            modalBox.className = "bg-white rounded-3xl p-6 md:p-10 max-w-md w-full text-center shadow-2xl transform transition-all border-4 border-rose-400 pop-scale flex flex-col items-center";
+
+            // 거대한 X표 표시
+            document.getElementById('modal-emoji').classList.add('hidden');
+            document.getElementById('modal-x-mark').classList.remove('hidden');
+
+            document.getElementById('modal-title').textContent = '다시 해볼까요?';
+            document.getElementById('modal-title').className = 'text-3xl md:text-4xl font-black text-rose-600 my-2';
+            document.getElementById('modal-msg').textContent = message;
+
+            document.getElementById('modal-next-btn').className = 'w-full bg-rose-500 hover:bg-rose-600 text-white font-black text-xl py-4 rounded-2xl shadow-lg transition active:scale-95 flex items-center justify-center space-x-2';
+            document.getElementById('modal-next-btn').innerHTML = '<span>다시 도전하기</span> <span>🔄</span>';
+
+            nextGameCallback = null; // 재시도
+            document.getElementById('feedback-modal').classList.remove('hidden');
+
+            speakText(`아쉬워요. ${message}`);
+        }
+
+        function closeModalNext() {
+            document.getElementById('feedback-modal').classList.add('hidden');
+            if (nextGameCallback) {
+                nextGameCallback();
+            }
+        }
+
+        // 페이지 로드 시 초기화
+        window.onload = function () {
+            initLearnMode();
+            speakText('어휘 상자 놀이에 오신 것을 환영합니다! 상자 속 포함되는 말을 배워볼까요?');
+        };
+    </script>
+</body>
+</html>
